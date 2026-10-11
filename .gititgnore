@@ -1,0 +1,29 @@
+# Build artifacts 
+*.o
+*.d
+*.a
+*.so
+*.so.*
+
+tunnel
+test_crypto
+
+# Test outputs 
+.test-logs/
+*.key
+
+# Editor / IDE 
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS 
+.DS_Store
+Thumbs.db
+
+# Misc 
+core
+core.*
+vgcore.*
