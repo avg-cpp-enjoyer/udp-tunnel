@@ -7,9 +7,14 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <openssl/core_names.h> 
 #include <openssl/err.h>
-#include <openssl/evp.h>
+#include <openssl/evp.h> 
+#include <openssl/kdf.h>          
 #include <openssl/pem.h>
+
+#define HKDF_INFO_TX "udp-tunnel v1 tx"
+#define HKDF_INFO_RX "udp-tunnel v1 rx"
 
 struct identity {
     EVP_PKEY* pkey;
@@ -65,7 +70,6 @@ identity* identity_load(const char* path) {
         return NULL;
     }
 
-    /* Reject anything that is not X25519 */
     if (!EVP_PKEY_is_a(pkey, "X25519")) {
         log_error("identity \"%s\" is not an X25519 key", path);
         EVP_PKEY_free(pkey);
@@ -120,6 +124,7 @@ void identity_free(identity* id) {
     if (!id) {
         return;
     }
+
     if (id->pkey) {
         EVP_PKEY_free(id->pkey);
     }
@@ -157,7 +162,7 @@ static int hex_nibble(char c) {
     if (c >= 'A' && c <= 'F') {
         return 10 + (c - 'A');
     }
-    
+
     return -1;
 }
 
@@ -188,8 +193,67 @@ void pubkey_to_hex(const uint8_t in[X25519_KEY_LEN], char out[X25519_KEY_LEN * 2
 
     static const char hex_chars[] = "0123456789abcdef";
     for (size_t i = 0; i < X25519_KEY_LEN; i++) {
-        out[2 * i]     = hex_chars[(in[i] >> 4) & 0xf];
+        out[2 * i] = hex_chars[(in[i] >> 4) & 0xf];
         out[2 * i + 1] = hex_chars[in[i] & 0xf];
     }
     out[X25519_KEY_LEN * 2] = '\0';
+}
+
+static int hkdf_derive(EVP_KDF_CTX* kdf_ctx, const uint8_t* 
+    ikm, size_t ikm_len, const char* info, uint8_t key_out[SESSION_KEY_LEN]) {
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, "SHA256", 0),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY, (void*)ikm, ikm_len),
+        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, (void*)info, strlen(info)),
+        OSSL_PARAM_construct_end()
+    };
+
+    if (EVP_KDF_derive(kdf_ctx, key_out, SESSION_KEY_LEN, params) != 1) {
+        log_error("EVP_KDF_derive(HKDF, info=\"%s\") failed", info);
+        return -1;
+    }
+
+    return 0;
+}
+
+int derive_session_keys(const uint8_t dh_ee[X25519_KEY_LEN], const uint8_t dh_se[X25519_KEY_LEN],
+    const uint8_t dh_es[X25519_KEY_LEN], uint8_t tx_key[SESSION_KEY_LEN], uint8_t rx_key[SESSION_KEY_LEN]) {
+    if (!dh_ee || !dh_se || !dh_es || !tx_key || !rx_key) {
+        log_error("NULL argument");
+        return -1;
+    }
+
+    uint8_t ikm[X25519_KEY_LEN * 3];
+    memcpy(ikm, dh_ee, X25519_KEY_LEN);
+    memcpy(ikm + X25519_KEY_LEN, dh_se, X25519_KEY_LEN);
+    memcpy(ikm + X25519_KEY_LEN * 2, dh_es, X25519_KEY_LEN);
+
+    int rc = -1;
+    EVP_KDF* kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
+    if (!kdf) {
+        log_error("EVP_KDF_fetch(HKDF) failed");
+        goto out_ikm;
+    }
+
+    EVP_KDF_CTX* kdf_ctx = EVP_KDF_CTX_new(kdf);
+    if (!kdf_ctx) {
+        log_error("EVP_KDF_CTX_new failed");
+        EVP_KDF_free(kdf);
+        goto out_ikm;
+    }
+
+    if (hkdf_derive(kdf_ctx, ikm, sizeof(ikm), HKDF_INFO_TX, tx_key) < 0) {
+        goto out_ctx;
+    }
+    if (hkdf_derive(kdf_ctx, ikm, sizeof(ikm), HKDF_INFO_RX, rx_key) < 0) {
+        goto out_ctx;
+    }
+
+    rc = 0;
+out_ctx:
+    EVP_KDF_CTX_free(kdf_ctx);
+    EVP_KDF_free(kdf);
+out_ikm:
+    OPENSSL_cleanse(ikm, sizeof(ikm));
+    return rc;
 }
