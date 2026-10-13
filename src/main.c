@@ -1,4 +1,5 @@
 #include "crypto.h"
+#include "handshake.h"
 #include "log.h"
 #include "tun.h"
 
@@ -7,6 +8,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <netdb.h>
+#include <openssl/crypto.h>
 #include <openssl/rand.h>
 #include <signal.h>
 #include <stdint.h>
@@ -195,23 +197,32 @@ static int load_key(const char* path, uint8_t key[KEY_LEN]) {
     return -1;
 }
 
-static int genkey(void) {
-    uint8_t key[KEY_LEN];
-    if (RAND_bytes(key, sizeof(key)) != 1) {
-        log_error("RAND_bytes failed");
+static int genkey(const char* path) {
+    identity* id = identity_generate();
+    if (!id) {
         return 1;
     }
 
-    size_t nwritten = fwrite(key, 1, sizeof(key), stdout);
-    if (nwritten != sizeof(key)) {
-        int saved_errno = errno;
-        OPENSSL_cleanse(key, sizeof(key));
-        log_error("fwrite(stdout) failed: %s", strerror(saved_errno));
-        return 1;
+    int rc = 0;
+    if (identity_save(id, path) < 0) {
+        rc = 1;
+        goto out;
     }
 
-    OPENSSL_cleanse(key, sizeof(key));
-    return 0;
+    uint8_t pub[X25519_KEY_LEN];
+    char hex[X25519_KEY_LEN * 2 + 1];
+
+    if (identity_pubkey_bytes(id, pub) < 0) {
+        rc = 1;
+        goto out;
+    }
+
+    pubkey_to_hex(pub, hex);
+    printf("%s\n", hex);
+    fprintf(stderr, "identity saved to %s (mode 0600)\n", path);
+out:
+    identity_free(id);
+    return rc;
 }
 
 static void usage(FILE* out, const char* prog) {
@@ -221,7 +232,9 @@ static void usage(FILE* out, const char* prog) {
         "  --listen ADDR:PORT     Local UDP bind address\n"
         "  --peer   ADDR:PORT     Peer UDP address\n"
         "  --key    FILE          Path to 32-byte AES key\n"
-        "  --genkey               Generate a new key and write to stdout\n"
+        "  --identity FILE        Path to our X25519 identity (PEM)\n"
+        "  --peer-pubkey HEX      Peer's X25519 public key (64 hex chars)\n"
+        "  --genkey FILE          Generate a new identity and save to FILE\n"
         "  -h, --help             This help\n",
         prog
     );
@@ -311,30 +324,75 @@ static void handle_udp_read(int tun_fd, int udp_fd, tunnel_crypto* tc,
     }
 }
 
+static int load_own_identity(const char* path, identity** out_id) {
+    if (!path) {
+        return 0;
+    }
+
+    identity* id = identity_load(path);
+    if (!id) {
+        return -1;
+    }
+
+    uint8_t pub[X25519_KEY_LEN];
+    char hex[X25519_PUBKEY_HEX_LEN];
+
+    if (identity_pubkey_bytes(id, pub) < 0) {
+        identity_free(id);
+        return -1;
+    }
+
+    pubkey_to_hex(pub, hex);
+    log_info("own identity: %s", hex);
+
+    *out_id = id;
+    return 0;
+}
+
+static int log_peer_pubkey(const char* hex) {
+    if (!hex) {
+        return 0;
+    }
+
+    uint8_t peer_pub[X25519_KEY_LEN];
+    if (pubkey_from_hex(hex, peer_pub) < 0) {
+        return -1;
+    }
+
+    log_info("peer pubkey: %s", hex);
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    const char* tun_name    = "tun0";
+    const char* tun_name = "tun0";
     const char* listen_addr = NULL;
-    const char* peer_addr   = NULL;
-    const char* key_path    = NULL;
+    const char* peer_addr = NULL;
+    const char* key_path = NULL;
+    const char* identity_path = NULL;
+    const char* peer_pubkey_hex = NULL;
 
     static const struct option long_opts[] = {
-        {"tun",    required_argument, 0, 't'},
-        {"listen", required_argument, 0, 'l'},
-        {"peer",   required_argument, 0, 'p'},
-        {"key",    required_argument, 0, 'k'},
-        {"genkey", no_argument,       0, 'g'},
-        {"help",   no_argument,       0, 'h'},
+        {"tun",         required_argument, 0, 't'},
+        {"listen",      required_argument, 0, 'l'},
+        {"peer",        required_argument, 0, 'p'},
+        {"key",         required_argument, 0, 'k'},
+        {"identity",    required_argument, 0, 'i'},
+        {"peer-pubkey", required_argument, 0, 'P'},
+        {"genkey",      required_argument, 0, 'g'},
+        {"help",        no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "t:l:p:k:gh", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "t:l:p:k:i:P:g:h", long_opts, NULL)) != -1) {
         switch (opt) {
-            case 't': tun_name    = optarg; break;
-            case 'l': listen_addr = optarg; break;
-            case 'p': peer_addr   = optarg; break;
-            case 'k': key_path    = optarg; break;
-            case 'g': return genkey();
+            case 't': tun_name         = optarg; break;
+            case 'l': listen_addr      = optarg; break;
+            case 'p': peer_addr        = optarg; break;
+            case 'k': key_path         = optarg; break;
+            case 'i': identity_path    = optarg; break;
+            case 'P': peer_pubkey_hex  = optarg; break;
+            case 'g': return genkey(optarg);
             case 'h': usage(stdout, argv[0]); return 0;
             default:  usage(stderr, argv[0]); return 1;
         }
@@ -349,6 +407,7 @@ int main(int argc, char** argv) {
     int tun_fd = -1;
     int udp_fd = -1;
     int epfd = -1;
+    identity* id = NULL;
     tunnel_crypto* tc = NULL;
     uint8_t key[KEY_LEN] = {0};
 
@@ -363,6 +422,18 @@ int main(int argc, char** argv) {
     tc = tc_new(key);
     if (!tc) {
         goto cleanup;
+    }
+
+    if (load_own_identity(identity_path, &id) < 0) {
+        goto cleanup;
+    }
+
+    if (log_peer_pubkey(peer_pubkey_hex) < 0) {
+        goto cleanup;
+    }
+
+    if (id && !peer_pubkey_hex) {
+        log_warn("--identity given without --peer-pubkey");
     }
 
     tun_fd = tun_open(tun_name);
@@ -436,6 +507,7 @@ int main(int argc, char** argv) {
 cleanup:
     OPENSSL_cleanse(key, sizeof(key));
     tc_free(tc);
+    identity_free(id);
 
     if (tun_fd >= 0) {
         close(tun_fd);

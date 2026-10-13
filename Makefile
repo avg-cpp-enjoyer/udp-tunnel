@@ -9,7 +9,7 @@ CFLAGS   += -DLOG_LEVEL=$(LOG_LEVEL)
 BIN      := tunnel
 TEST_BIN := test_crypto
 
-SRCS     := src/main.c src/crypto.c src/tun.c
+SRCS     := src/main.c src/crypto.c src/tun.c src/handshake.c
 OBJS     := $(SRCS:.c=.o)
 
 TEST_SRCS := tests/test_crypto.c src/crypto.c
