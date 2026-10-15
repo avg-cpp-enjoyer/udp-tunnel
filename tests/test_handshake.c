@@ -102,74 +102,68 @@ static void test_hex_uppercase(void) {
 }
 
 static void test_hkdf_deterministic(void) {
-    uint8_t dh1[X25519_KEY_LEN];
-    uint8_t dh2[X25519_KEY_LEN];
-    uint8_t dh3[X25519_KEY_LEN];
-    fill_random(dh1, sizeof(dh1));
-    fill_random(dh2, sizeof(dh2));
-    fill_random(dh3, sizeof(dh3));
+    uint8_t dh_ee[X25519_KEY_LEN], dh_se[X25519_KEY_LEN], dh_es[X25519_KEY_LEN];
+    fill_random(dh_ee, sizeof(dh_ee));
+    fill_random(dh_se, sizeof(dh_se));
+    fill_random(dh_es, sizeof(dh_es));
 
-    uint8_t tx_a[SESSION_KEY_LEN], rx_a[SESSION_KEY_LEN];
-    uint8_t tx_b[SESSION_KEY_LEN], rx_b[SESSION_KEY_LEN];
+    uint8_t ir_a[SESSION_KEY_LEN], ri_a[SESSION_KEY_LEN];
+    uint8_t ir_b[SESSION_KEY_LEN], ri_b[SESSION_KEY_LEN];
 
-    CHECK(derive_session_keys(dh1, dh2, dh3, tx_a, rx_a) == 0);
-    CHECK(derive_session_keys(dh1, dh2, dh3, tx_b, rx_b) == 0);
+    CHECK(derive_session_keys(dh_ee, dh_se, dh_es, ir_a, ri_a) == 0);
+    CHECK(derive_session_keys(dh_ee, dh_se, dh_es, ir_b, ri_b) == 0);
 
-    CHECK(memcmp(tx_a, tx_b, SESSION_KEY_LEN) == 0);
-    CHECK(memcmp(rx_a, rx_b, SESSION_KEY_LEN) == 0);
+    CHECK(memcmp(ir_a, ir_b, SESSION_KEY_LEN) == 0);
+    CHECK(memcmp(ri_a, ri_b, SESSION_KEY_LEN) == 0);
 }
 
-static void test_hkdf_tx_rx_differ(void) {
-    uint8_t dh1[X25519_KEY_LEN];
-    uint8_t dh2[X25519_KEY_LEN];
-    uint8_t dh3[X25519_KEY_LEN];
-    fill_random(dh1, sizeof(dh1));
-    fill_random(dh2, sizeof(dh2));
-    fill_random(dh3, sizeof(dh3));
+static void test_hkdf_directions_differ(void) {
+    uint8_t dh_ee[X25519_KEY_LEN], dh_se[X25519_KEY_LEN], dh_es[X25519_KEY_LEN];
+    fill_random(dh_ee, sizeof(dh_ee));
+    fill_random(dh_se, sizeof(dh_se));
+    fill_random(dh_es, sizeof(dh_es));
 
-    uint8_t tx[SESSION_KEY_LEN], rx[SESSION_KEY_LEN];
-    CHECK(derive_session_keys(dh1, dh2, dh3, tx, rx) == 0);
-    CHECK(memcmp(tx, rx, SESSION_KEY_LEN) != 0);
+    uint8_t key_ir[SESSION_KEY_LEN], key_ri[SESSION_KEY_LEN];
+    CHECK(derive_session_keys(dh_ee, dh_se, dh_es, key_ir, key_ri) == 0);
+    CHECK(memcmp(key_ir, key_ri, SESSION_KEY_LEN) != 0);
 }
 
 static void test_hkdf_different_inputs(void) {
-    uint8_t dh1_a[X25519_KEY_LEN], dh2_a[X25519_KEY_LEN], dh3_a[X25519_KEY_LEN];
-    uint8_t dh1_b[X25519_KEY_LEN], dh2_b[X25519_KEY_LEN], dh3_b[X25519_KEY_LEN];
-    fill_random(dh1_a, sizeof(dh1_a));
-    fill_random(dh2_a, sizeof(dh2_a));
-    fill_random(dh3_a, sizeof(dh3_a));
-    fill_random(dh1_b, sizeof(dh1_b));
-    fill_random(dh2_b, sizeof(dh2_b));
-    fill_random(dh3_b, sizeof(dh3_b));
+    uint8_t dh_ee_a[X25519_KEY_LEN], dh_se_a[X25519_KEY_LEN], dh_es_a[X25519_KEY_LEN];
+    uint8_t dh_ee_b[X25519_KEY_LEN], dh_se_b[X25519_KEY_LEN], dh_es_b[X25519_KEY_LEN];
+    fill_random(dh_ee_a, sizeof(dh_ee_a));
+    fill_random(dh_se_a, sizeof(dh_se_a));
+    fill_random(dh_es_a, sizeof(dh_es_a));
+    fill_random(dh_ee_b, sizeof(dh_ee_b));
+    fill_random(dh_se_b, sizeof(dh_se_b));
+    fill_random(dh_es_b, sizeof(dh_es_b));
 
-    uint8_t tx_a[SESSION_KEY_LEN], rx_a[SESSION_KEY_LEN];
-    uint8_t tx_b[SESSION_KEY_LEN], rx_b[SESSION_KEY_LEN];
+    uint8_t ir_a[SESSION_KEY_LEN], ri_a[SESSION_KEY_LEN];
+    uint8_t ir_b[SESSION_KEY_LEN], ri_b[SESSION_KEY_LEN];
 
-    CHECK(derive_session_keys(dh1_a, dh2_a, dh3_a, tx_a, rx_a) == 0);
-    CHECK(derive_session_keys(dh1_b, dh2_b, dh3_b, tx_b, rx_b) == 0);
+    CHECK(derive_session_keys(dh_ee_a, dh_se_a, dh_es_a, ir_a, ri_a) == 0);
+    CHECK(derive_session_keys(dh_ee_b, dh_se_b, dh_es_b, ir_b, ri_b) == 0);
 
-    CHECK(memcmp(tx_a, tx_b, SESSION_KEY_LEN) != 0);
-    CHECK(memcmp(rx_a, rx_b, SESSION_KEY_LEN) != 0);
+    CHECK(memcmp(ir_a, ir_b, SESSION_KEY_LEN) != 0);
+    CHECK(memcmp(ri_a, ri_b, SESSION_KEY_LEN) != 0);
 }
 
 static void test_hkdf_single_change(void) {
-    uint8_t dh1[X25519_KEY_LEN];
-    uint8_t dh2[X25519_KEY_LEN];
-    uint8_t dh3[X25519_KEY_LEN];
-    fill_random(dh1, sizeof(dh1));
-    fill_random(dh2, sizeof(dh2));
-    fill_random(dh3, sizeof(dh3));
+    uint8_t dh_ee[X25519_KEY_LEN], dh_se[X25519_KEY_LEN], dh_es[X25519_KEY_LEN];
+    fill_random(dh_ee, sizeof(dh_ee));
+    fill_random(dh_se, sizeof(dh_se));
+    fill_random(dh_es, sizeof(dh_es));
 
-    uint8_t tx_orig[SESSION_KEY_LEN], rx_orig[SESSION_KEY_LEN];
-    CHECK(derive_session_keys(dh1, dh2, dh3, tx_orig, rx_orig) == 0);
+    uint8_t ir_orig[SESSION_KEY_LEN], ri_orig[SESSION_KEY_LEN];
+    CHECK(derive_session_keys(dh_ee, dh_se, dh_es, ir_orig, ri_orig) == 0);
 
-    dh2[0] ^= 0x01;
+    dh_se[0] ^= 0x01;
 
-    uint8_t tx_mod[SESSION_KEY_LEN], rx_mod[SESSION_KEY_LEN];
-    CHECK(derive_session_keys(dh1, dh2, dh3, tx_mod, rx_mod) == 0);
+    uint8_t ir_mod[SESSION_KEY_LEN], ri_mod[SESSION_KEY_LEN];
+    CHECK(derive_session_keys(dh_ee, dh_se, dh_es, ir_mod, ri_mod) == 0);
 
-    CHECK(memcmp(tx_orig, tx_mod, SESSION_KEY_LEN) != 0);
-    CHECK(memcmp(rx_orig, rx_mod, SESSION_KEY_LEN) != 0);
+    CHECK(memcmp(ir_orig, ir_mod, SESSION_KEY_LEN) != 0);
+    CHECK(memcmp(ri_orig, ri_mod, SESSION_KEY_LEN) != 0);
 }
 
 static void test_hkdf_edges(void) {
@@ -184,6 +178,201 @@ static void test_hkdf_edges(void) {
     CHECK(derive_session_keys(buf, buf, buf, out, NULL) == -1);
 }
 
+static void make_pair(identity** a, identity** b,
+    uint8_t pub_a[X25519_KEY_LEN], uint8_t pub_b[X25519_KEY_LEN]) {
+    memset(pub_a, 0, X25519_KEY_LEN);
+    memset(pub_b, 0, X25519_KEY_LEN);
+
+    *a = identity_generate();
+    *b = identity_generate();
+    if (!*a || !*b) {
+        return;
+    }
+    if (identity_pubkey_bytes(*a, pub_a) < 0) {
+        return;
+    }
+    if (identity_pubkey_bytes(*b, pub_b) < 0) {
+        return;
+    }
+}
+
+static void test_handshake_full(void) {
+    identity* id_a = NULL;
+    identity* id_b = NULL;
+    uint8_t pub_a[X25519_KEY_LEN], pub_b[X25519_KEY_LEN];
+    make_pair(&id_a, &id_b, pub_a, pub_b);
+    CHECK(id_a != NULL);
+    CHECK(id_b != NULL);
+    if (!id_a || !id_b) {
+        identity_free(id_a);
+        identity_free(id_b);
+        return;
+    }
+
+    handshake* hs_a = hs_new(id_a, pub_b, true);   /* initiator */
+    handshake* hs_b = hs_new(id_b, pub_a, false);  /* responder */
+    CHECK(hs_a != NULL);
+    CHECK(hs_b != NULL);
+    if (!hs_a || !hs_b) {
+        goto cleanup;
+    }
+
+    uint8_t init_msg[HS_MSG_SIZE];
+    ssize_t ilen = hs_make_init(hs_a, init_msg, sizeof(init_msg));
+    CHECK(ilen == HS_MSG_SIZE);
+    CHECK(hs_consume(hs_b, init_msg, (size_t)ilen) == 0);
+
+    uint8_t resp_msg[HS_MSG_SIZE];
+    ssize_t rlen = hs_make_resp(hs_b, resp_msg, sizeof(resp_msg));
+    CHECK(rlen == HS_MSG_SIZE);
+    CHECK(hs_done(hs_b));
+    CHECK(hs_consume(hs_a, resp_msg, (size_t)rlen) == 0);
+
+    CHECK(hs_done(hs_a));
+    CHECK(hs_done(hs_b));
+
+    uint8_t tx_a[SESSION_KEY_LEN], rx_a[SESSION_KEY_LEN];
+    uint8_t tx_b[SESSION_KEY_LEN], rx_b[SESSION_KEY_LEN];
+    CHECK(hs_get_session_keys(hs_a, tx_a, rx_a) == 0);
+    CHECK(hs_get_session_keys(hs_b, tx_b, rx_b) == 0);
+
+    CHECK(memcmp(tx_a, rx_b, SESSION_KEY_LEN) == 0);
+    CHECK(memcmp(rx_a, tx_b, SESSION_KEY_LEN) == 0);
+    CHECK(memcmp(tx_a, rx_a, SESSION_KEY_LEN) != 0);
+cleanup:
+    hs_free(hs_a);
+    hs_free(hs_b);
+    identity_free(id_a);
+    identity_free(id_b);
+}
+
+static void test_handshake_wrong_peer(void) {
+    identity* id_a = identity_generate();
+    identity* id_b = identity_generate();
+    identity* id_c = identity_generate();
+    CHECK(id_a != NULL);
+    CHECK(id_b != NULL);
+    CHECK(id_c != NULL);
+    if (!id_a || !id_b || !id_c) {
+        goto cleanup;
+    }
+
+    uint8_t pub_a[X25519_KEY_LEN], pub_b[X25519_KEY_LEN], pub_c[X25519_KEY_LEN];
+    CHECK(identity_pubkey_bytes(id_a, pub_a) == 0);
+    CHECK(identity_pubkey_bytes(id_b, pub_b) == 0);
+    CHECK(identity_pubkey_bytes(id_c, pub_c) == 0);
+
+    handshake* hs_a = hs_new(id_a, pub_b, true);   /* expects B */
+    handshake* hs_c = hs_new(id_c, pub_a, false);  /* is C */
+    CHECK(hs_a != NULL);
+    CHECK(hs_c != NULL);
+
+    if (!hs_a || !hs_c) {
+        hs_free(hs_a);
+        hs_free(hs_c);
+        goto cleanup;
+    }
+
+    uint8_t init_msg[HS_MSG_SIZE], resp_msg[HS_MSG_SIZE];
+    ssize_t ilen = hs_make_init(hs_a, init_msg, sizeof(init_msg));
+    CHECK(ilen == HS_MSG_SIZE);
+    CHECK(hs_consume(hs_c, init_msg, (size_t)ilen) == 0);
+
+    ssize_t rlen = hs_make_resp(hs_c, resp_msg, sizeof(resp_msg));
+    CHECK(rlen == HS_MSG_SIZE);
+    CHECK(hs_consume(hs_a, resp_msg, (size_t)rlen) == 0);
+
+    uint8_t tx_a[SESSION_KEY_LEN], rx_a[SESSION_KEY_LEN];
+    uint8_t tx_c[SESSION_KEY_LEN], rx_c[SESSION_KEY_LEN];
+    CHECK(hs_get_session_keys(hs_a, tx_a, rx_a) == 0);
+    CHECK(hs_get_session_keys(hs_c, tx_c, rx_c) == 0);
+    CHECK(memcmp(tx_a, rx_c, SESSION_KEY_LEN) != 0);
+
+    hs_free(hs_a);
+    hs_free(hs_c);
+cleanup:
+    identity_free(id_a);
+    identity_free(id_b);
+    identity_free(id_c);
+}
+
+static void test_handshake_state(void) {
+    identity* id_a = NULL;
+    identity* id_b = NULL;
+    uint8_t pub_a[X25519_KEY_LEN], pub_b[X25519_KEY_LEN];
+    make_pair(&id_a, &id_b, pub_a, pub_b);
+    CHECK(id_a != NULL);
+    CHECK(id_b != NULL);
+    if (!id_a || !id_b) {
+        identity_free(id_a);
+        identity_free(id_b);
+        return;
+    }
+
+    handshake* hs_a = hs_new(id_a, pub_b, true);
+    handshake* hs_b = hs_new(id_b, pub_a, false);
+    CHECK(hs_a != NULL);
+    CHECK(hs_b != NULL);
+    if (!hs_a || !hs_b) {
+        goto cleanup;
+    }
+
+    uint8_t msg[HS_MSG_SIZE];
+    CHECK(hs_make_init(hs_b, msg, sizeof(msg)) == -1);
+    CHECK(hs_make_resp(hs_a, msg, sizeof(msg)) == -1);
+    CHECK(hs_make_resp(hs_b, msg, sizeof(msg)) == -1);
+    CHECK(hs_make_init(hs_a, msg, sizeof(msg)) == HS_MSG_SIZE);
+    CHECK(hs_make_init(hs_a, msg, sizeof(msg)) == -1);
+
+    CHECK(hs_consume(hs_b, msg, sizeof(msg)) == 0);
+    CHECK(hs_consume(hs_b, msg, HS_MSG_SIZE - 1) == -1);
+
+    handshake* hs_fresh = hs_new(id_b, pub_a, false);
+    CHECK(hs_fresh != NULL);
+
+    if (hs_fresh) {
+        uint8_t bad[HS_MSG_SIZE] = {0};
+        bad[0] = HS_MSG_TYPE_RESP;
+        CHECK(hs_consume(hs_fresh, bad, sizeof(bad)) == -1);
+        hs_free(hs_fresh);
+    }
+
+cleanup:
+    hs_free(hs_a);
+    hs_free(hs_b);
+    identity_free(id_a);
+    identity_free(id_b);
+}
+
+static void test_handshake_not_done(void) {
+    identity* id_a = NULL;
+    identity* id_b = NULL;
+    uint8_t pub_a[X25519_KEY_LEN], pub_b[X25519_KEY_LEN];
+    make_pair(&id_a, &id_b, pub_a, pub_b);
+    CHECK(id_a != NULL);
+    CHECK(id_b != NULL);
+    if (!id_a || !id_b) {
+        identity_free(id_a);
+        identity_free(id_b);
+        return;
+    }
+
+    handshake* hs = hs_new(id_a, pub_b, true);
+    CHECK(hs != NULL);
+    if (!hs) {
+        goto cleanup;
+    }
+
+    uint8_t tx[SESSION_KEY_LEN], rx[SESSION_KEY_LEN];
+    CHECK(hs_get_session_keys(hs, tx, rx) == -1);
+    CHECK(!hs_done(hs));
+
+cleanup:
+    hs_free(hs);
+    identity_free(id_a);
+    identity_free(id_b);
+}
+
 int main(void) {
     srand(0xC0FFEE);
 
@@ -193,10 +382,14 @@ int main(void) {
     test_hex_invalid();
     test_hex_uppercase();
     test_hkdf_deterministic();
-    test_hkdf_tx_rx_differ();
+    test_hkdf_directions_differ();
     test_hkdf_different_inputs();
     test_hkdf_single_change();
     test_hkdf_edges();
+    test_handshake_full();
+    test_handshake_wrong_peer();
+    test_handshake_state();
+    test_handshake_not_done();
 
     if (failed) {
         fprintf(stderr, "\n%d check(s) FAILED\n", failed);
